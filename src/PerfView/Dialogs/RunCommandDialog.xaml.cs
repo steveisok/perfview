@@ -207,6 +207,11 @@ namespace PerfView
                 RuntimeLoadingCheckBox.IsChecked = true;
             }
 
+            if (args.AsyncProfiler)
+            {
+                AsyncProfilerCheckBox.IsChecked = true;
+            }
+
             if (args.DumpHeap)
             {
                 HeapSnapshotCheckBox.IsChecked = true;
@@ -866,6 +871,7 @@ namespace PerfView
 
             m_args.CCWRefCount = CCWRefCountCheckBox.IsChecked ?? false;
             m_args.RuntimeLoading = RuntimeLoadingCheckBox.IsChecked ?? false;
+            m_args.AsyncProfiler = AsyncProfilerCheckBox.IsChecked ?? false;
 
             m_args.DumpHeap = HeapSnapshotCheckBox.IsChecked ?? false;
 

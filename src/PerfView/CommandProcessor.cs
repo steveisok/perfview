@@ -2,6 +2,7 @@
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.AspNet;
+using Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler;
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 using Microsoft.Diagnostics.Tracing.Parsers.Kernel;
 using Microsoft.Diagnostics.Tracing.Session;
@@ -901,6 +902,19 @@ namespace PerfView
                         EnableUserProvider(userModeSession, "Microsoft-Windows-Win32k", new Guid("8C416C79-D49B-4F01-A467-E56D3AA8234C"), TraceEventLevel.Verbose, 0x10000000, options);
                     }
 
+                    if (parsedArgs.AsyncProfiler)
+                    {
+                        // Enable the runtime's high-perf async profiler EventSource. Stacks are
+                        // emitted by the provider itself (the buffer is self-describing), so we
+                        // don't pass StacksEnabled. All sub-event keywords are turned on.
+                        EnableUserProvider(userModeSession,
+                            AsyncProfilerTraceEventParser.ProviderName,
+                            AsyncProfilerTraceEventParser.ProviderGuid,
+                            TraceEventLevel.Verbose,
+                            (ulong)AsyncProfilerTraceEventParser.Keywords.All,
+                            options);
+                    }
+
                     // Start network monitoring capture if needed
                     if (parsedArgs.NetMonCapture)
                     {
@@ -1236,6 +1250,31 @@ namespace PerfView
                     {
                         using (TraceEventSession clrSession = new TraceEventSession(s_UserModeSessionName, TraceEventSessionOptions.Attach))
                         {
+                            if (parsedArgs.AsyncProfiler)
+                            {
+                                // Tell the runtime async profiler to ship every in-flight per-thread
+                                // buffer before we stop the session.  This is done by re-issuing
+                                // EnableProvider with the FlushCommand controller command — the
+                                // runtime's EventSource.OnEventCommand handler treats command 1 as
+                                // "flush now".
+                                try
+                                {
+                                    var flushOptions = new TraceEventProviderOptions();
+                                    flushOptions.AddArgument("Command", AsyncProfilerTraceEventParser.FlushCommand.ToString());
+                                    clrSession.EnableProvider(
+                                        AsyncProfilerTraceEventParser.ProviderGuid,
+                                        TraceEventLevel.Verbose,
+                                        (ulong)AsyncProfilerTraceEventParser.Keywords.All,
+                                        flushOptions);
+                                    // Give the runtime a moment to drain the buffers before stop.
+                                    Thread.Sleep(200);
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogFile.WriteLine("Warning: failed to send AsyncProfiler flush command: {0}", ex.Message);
+                                }
+                            }
+
                             if (parsedArgs.InMemoryCircularBuffer)
                             {
                                 LogFile.WriteLine("InMemoryCircularBuffer Set, Dumping kernel log");

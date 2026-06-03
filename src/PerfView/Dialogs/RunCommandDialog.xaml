@@ -380,7 +380,11 @@
                         </TextBlock>
                         <CheckBox Grid.Row="0" Grid.Column="12" Name="HeapSnapshotCheckBox" VerticalAlignment="Center" AutomationProperties.Name="Dump Heap"/>
 
-                        <CheckBox Grid.Row="0" Grid.Column="14" VerticalAlignment="Center" Visibility="Hidden" Margin="0,2" />
+                        <TextBlock Grid.Row="0" Grid.Column="13" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,2,5,2"
+                           ToolTip="Enable the high-performance .NET Async Profiler (System.Runtime.CompilerServices.AsyncProfilerEventSource).  Captures every async context create/resume/suspend/complete with a callstack." >
+                <Hyperlink Command="Help" CommandParameter="AsyncProfilerCheckBox">Async Profiler:</Hyperlink>
+                        </TextBlock>
+                        <CheckBox Grid.Row="0" Grid.Column="14" Name="AsyncProfilerCheckBox" VerticalAlignment="Center" Margin="0,2" AutomationProperties.Name="Async Profiler"/>
                     </Grid>
 
                     <!-- Additional Providers -->

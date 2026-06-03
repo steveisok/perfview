@@ -141,6 +141,7 @@ namespace PerfView
         public bool CCWRefCount;            // Capture CCW references count increasing and decreasing
         public bool RuntimeLoading;         // Capture information about runtime loading such as R2R and type load events
         public bool UserCritContention;     // Capture UserCrit contention events
+        public bool AsyncProfiler;          // Enable the high-perf .NET Async Profiler EventSource
 
         public bool Wpr;                    // Collect like WPR (no zip, puts NGEN pdbs in a .ngenpdbs directory).  
 
@@ -548,6 +549,9 @@ namespace PerfView
             parser.DefineOptionalQualifier("CCWRefCount", ref CCWRefCount, "Turns on logging of information about .NET Native CCW reference counting.");
             parser.DefineOptionalQualifier("RuntimeLoading", ref RuntimeLoading, "Turn on logging of runtime loading operations.");
             parser.DefineOptionalQualifier("UserCritContention", ref UserCritContention, "Turn on UserCrit contention events.");
+            parser.DefineOptionalQualifier("AsyncProfiler", ref AsyncProfiler,
+                "Enable the high-performance .NET Async Profiler EventSource (System.Runtime.CompilerServices.AsyncProfilerEventSource). " +
+                "Captures every async context create/resume/suspend/complete with a callstack.");
             parser.DefineOptionalQualifier("OSHeapProcess", ref OSHeapProcess, "Turn on per-allocation profiling of allocation from the OS heap for the process with the given process ID.");
             parser.DefineOptionalQualifier("OSHeapExe", ref OSHeapExe, "Turn on per-allocation profiling of allocation from the OS heap for the process with the given EXE (only filename WITH extension).");
             parser.DefineOptionalQualifier("OSHeapMaxMB", ref OSHeapMaxMB, "Approximate maximum size of OS heap ETL file.");

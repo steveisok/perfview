@@ -7,6 +7,7 @@ using Microsoft.Diagnostics.Tracing.AutomatedAnalysis;
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.EventPipe;
 using Microsoft.Diagnostics.Tracing.Parsers;
+using Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler;
 using Microsoft.Diagnostics.Tracing.Parsers.Universal.Events;
 using Microsoft.Diagnostics.Tracing.Parsers.AspNet;
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
@@ -6858,6 +6859,17 @@ namespace PerfView
 
                 return waitHandleWaitSource;
             }
+            else if (streamName == "Async Profiler Stacks")
+            {
+                var asyncSource = new MutableTraceEventStackSource(eventLog);
+                asyncSource.ShowUnknownAddresses = App.CommandLineArgs.ShowUnknownAddresses;
+                asyncSource.ShowOptimizationTiers = App.CommandLineArgs.ShowOptimizationTiers;
+
+                var computer = new PerfView.Computers.AsyncProfilerLatencyComputer(eventLog, asyncSource);
+                computer.GenerateStacks();
+
+                return asyncSource;
+            }
             else
             {
                 throw new Exception("Unknown stream " + streamName);
@@ -7657,7 +7669,7 @@ namespace PerfView
                 stackWindow.FoldRegExTextBox.Items.Insert(0, prev);
             }
             
-            if (stackSourceName == "Contention" || stackSourceName == "WaitHandleWait")
+            if (stackSourceName == "Contention" || stackSourceName == "WaitHandleWait" || stackSourceName == "Async Profiler Stacks")
             {
                 ConfigureStackWindowForStartStopThreadTime(stackWindow);
             }
@@ -7826,6 +7838,7 @@ namespace PerfView
             bool hasAspNetCoreHosting = false;
             bool hasContention = false;
             bool hasWaitHandle = false;
+            bool hasAsyncProfiler = false;
 
             var stackEvents = new List<TraceEventCounts>();
             foreach (var counts in tracelog.Stats)
@@ -7916,6 +7929,11 @@ namespace PerfView
                 if (name.StartsWith("WaitHandleWait/Start"))
                 {
                     hasWaitHandle = true;
+                }
+
+                if (!hasAsyncProfiler && counts.ProviderGuid == AsyncProfilerTraceEventParser.ProviderGuid)
+                {
+                    hasAsyncProfiler = true;
                 }
                 
                 if (counts.StackCount > 0)
@@ -8184,6 +8202,11 @@ namespace PerfView
             if (hasWaitHandle)
             {
                 advanced.Children.Add(new PerfViewStackSource(this, "WaitHandleWait"));
+            }
+
+            if (hasAsyncProfiler)
+            {
+                advanced.Children.Add(new PerfViewStackSource(this, "Async Profiler Stacks"));
             }
             
             if (hasAnyStacks)
@@ -9622,6 +9645,7 @@ namespace PerfView
             bool hasAspNetCoreHosting = false;
             bool hasContention = false;
             bool hasWaitHandle = false;
+            bool hasAsyncProfiler = false;
             bool hasExceptions = false;
             bool hasUniversalSystem = false;
             bool hasUniversalCPU = false;
@@ -9678,6 +9702,10 @@ namespace PerfView
                     else if (eventStats.EventName.StartsWith("WaitHandleWait/Start"))
                     {
                         hasWaitHandle = true;
+                    }
+                    else if (eventStats.ProviderGuid == AsyncProfilerTraceEventParser.ProviderGuid)
+                    {
+                        hasAsyncProfiler = true;
                     }
                     else if (eventStats.EventName.StartsWith("Exception/Start"))
                     {
@@ -9787,6 +9815,11 @@ namespace PerfView
                 if (hasWaitHandle)
                 {
                     advanced.AddChild(new PerfViewStackSource(this, "WaitHandleWait"));
+                }
+
+                if (hasAsyncProfiler)
+                {
+                    advanced.AddChild(new PerfViewStackSource(this, "Async Profiler Stacks"));
                 }
 
                 if (hasExceptions)
@@ -9954,6 +9987,21 @@ namespace PerfView
                         computer.GenerateStacks();
 
                         return waitHandleWaitSource;
+                    }
+                case "Async Profiler Stacks":
+                    {
+                        var eventLog = GetTraceLog(log);
+
+                        var asyncSource = new MutableTraceEventStackSource(eventLog);
+                        // EventPipe currently only has managed code stacks.
+                        asyncSource.OnlyManagedCodeStacks = true;
+                        asyncSource.ShowUnknownAddresses = App.CommandLineArgs.ShowUnknownAddresses;
+                        asyncSource.ShowOptimizationTiers = App.CommandLineArgs.ShowOptimizationTiers;
+
+                        var computer = new PerfView.Computers.AsyncProfilerLatencyComputer(eventLog, asyncSource);
+                        computer.GenerateStacks();
+
+                        return asyncSource;
                     }
                 case "Thread Time (with StartStop Activities)":
                     {
@@ -10224,7 +10272,7 @@ namespace PerfView
                 stackWindow.ComputeMaxInTopStats = true;
             }
 
-            if (stackSourceName == "Contention" || stackSourceName == "WaitHandleWait")
+            if (stackSourceName == "Contention" || stackSourceName == "WaitHandleWait" || stackSourceName == "Async Profiler Stacks")
             {
                 ConfigureStackWindowForStartStopThreadTime(stackWindow);
             }
