@@ -729,6 +729,9 @@ namespace Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler
             EventId = eventId;
             ResolvedQpc = resolvedQpc;
             Header = header;
+            // Cache ProcessID at construction so consumers don't have to keep RawEvent live
+            // — and so unit tests with a null/fake RawEvent can still inspect it.
+            ProcessID = rawEvent != null ? rawEvent.ProcessID : 0;
         }
 
         /// <summary>The originating <c>AsyncEvents</c> trace event (for ProcessID/TimeStamp lookup).</summary>
@@ -740,7 +743,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler
         /// <summary>The buffer header context (AsyncThreadContextId, OsThreadId, etc.).</summary>
         public BufferHeader Header { get; }
 
-        public int ProcessID { get { return RawEvent.ProcessID; } }
+        public int ProcessID { get; }
         public uint AsyncThreadContextId { get { return Header.AsyncThreadContextId; } }
         public ulong OsThreadId { get { return Header.OsThreadId; } }
     }
