@@ -457,9 +457,9 @@ namespace Microsoft.Diagnostics.Tracing
         internal long QPCFreq { get { return _QPCFreq; } }
 
         /// <summary>
-        /// Converts the Query Performance Counter (QPC) ticks to a number of milliseconds from the start of the trace.   
+        /// Converts the Query Performance Counter (QPC) ticks to a number of milliseconds from the start of the trace.
         /// </summary>
-        internal double QPCTimeToRelMSec(long QPCTime)
+        public double QPCTimeToRelMSec(long QPCTime)
         {
             // Ensure that we have a certain amount of sanity (events don't occur before sessionStartTime).  
             if (QPCTime < sessionStartTimeQPC)
