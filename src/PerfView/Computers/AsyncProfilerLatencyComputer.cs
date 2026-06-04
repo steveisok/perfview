@@ -2,8 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Computers;
 using Microsoft.Diagnostics.Tracing.Etlx;
+using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler;
 using Microsoft.Diagnostics.Tracing.Stacks;
 
@@ -13,9 +15,10 @@ namespace PerfView.Computers
     /// Generates "Async Profiler Stacks": one stack-source sample per async-context
     /// Resume → Suspend (or Completed) pair, with metric = elapsed ms and stack =
     /// the async callstack snapshot captured by the runtime profiler at the matching
-    /// Resume.  The async callstack frames are emitted as hex IPs (e.g.
-    /// <c>AsyncIP 0x7ffab1234000 (state=2)</c>) under a process node; symbolization
-    /// of those IPs is a follow-up.
+    /// Resume.  Native callstack IPs are symbolized via the TraceLog code addresses
+    /// registered during ETLX conversion; frames whose IP could not be resolved (or
+    /// handrolled continuations that carry no IP) fall back to a synthetic
+    /// <c>AsyncFrame 0x… (state=N)</c> name under a process node.
     /// </summary>
     internal sealed class AsyncProfilerLatencyComputer
     {
@@ -123,14 +126,35 @@ namespace PerfView.Computers
                 for (int i = 0; i < cs.FrameCount; i++)
                 {
                     var f = cs.Frames[i];
-                    string name = f.NativeIP == 0
-                        ? $"AsyncFrame Handrolled (state={f.State})"
-                        : $"AsyncFrame 0x{f.NativeIP:x} (state={f.State})";
-                    stack = _interner.CallStackIntern(_interner.FrameIntern(name), stack);
+                    stack = _interner.CallStackIntern(GetFrameIndex(f, info.CallstackEventIndex), stack);
                 }
             }
 
             return stack;
+        }
+
+        /// <summary>
+        /// Resolve a single async frame to a stack-source frame.  Native IPs are looked up
+        /// against the code addresses that were registered during ETLX conversion (see
+        /// <c>AsyncEventsTraceData.LogCodeAddresses</c>); when the lookup succeeds the frame is
+        /// fully symbolizable (module!method).  Frames with no IP (handrolled continuations) and
+        /// IPs that failed to register fall back to a synthetic hex name.
+        /// </summary>
+        private StackSourceFrameIndex GetFrameIndex(AsyncFrame frame, EventIndex callstackEventIndex)
+        {
+            if (frame.NativeIP != 0 && callstackEventIndex != EventIndex.Invalid)
+            {
+                CodeAddressIndex codeAddressIndex = _eventLog.GetCodeAddressIndexAtEvent(frame.NativeIP, callstackEventIndex);
+                if (codeAddressIndex != CodeAddressIndex.Invalid)
+                {
+                    return _stackSource.GetFrameIndex(codeAddressIndex);
+                }
+            }
+
+            string name = frame.NativeIP == 0
+                ? $"AsyncFrame Handrolled (state={frame.State})"
+                : $"AsyncFrame 0x{frame.NativeIP:x} (state={frame.State})";
+            return _interner.FrameIntern(name);
         }
     }
 }

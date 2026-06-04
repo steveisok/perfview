@@ -39,11 +39,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
         /// Provider GUID derived from <see cref="ProviderName"/> via the standard EventSource
         /// name-to-GUID SHA-1 algorithm (see <c>TraceEventProviders.GetEventSourceGuidFromName</c>).
         /// </summary>
-        public static readonly Guid ProviderGuid = new Guid(
-            unchecked((int)0xf8f29278),
-            unchecked((short)0x1df8),
-            unchecked((short)0xd650),
-            0xae, 0xa7, 0x59, 0x4d, 0x84, 0x6c, 0x22, 0x74);
+        public static readonly Guid ProviderGuid = new Guid("7892f2f8-f81d-50d6-aea7-594d846c2274");
 
         /// <summary>
         /// Wire-format version this parser understands.
@@ -260,13 +256,19 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                 ulong currentTaskId = 0;
                 long timestamp = (long)header.StartTimestamp;
                 int subEventIndex = 0;
+                // TotalSize is the authoritative count of meaningful bytes in the buffer (it was
+                // validated to be <= buffer.Length when the header was read).  Bound the decode
+                // loop by TotalSize rather than buffer.Length so that any trailing padding past
+                // the logical end of the buffer is never mis-decoded as a (bogus) sub-event,
+                // which would otherwise raise a spurious parse error.
+                int limit = (int)header.TotalSize;
                 // Bound the iteration so a corrupt EventCount cannot loop forever; the buffer
                 // length itself is the ultimate guard.
                 int maxIterations = (int)Math.Min(header.EventCount + 16u, (uint)buffer.Length);
 
-                while (index < buffer.Length && subEventIndex < maxIterations)
+                while (index < limit && subEventIndex < maxIterations)
                 {
-                    if (index + 1 > buffer.Length)
+                    if (index + 1 > limit)
                         break;
 
                     AsyncEventID eventId = (AsyncEventID)buffer[index++];
@@ -698,6 +700,76 @@ namespace Microsoft.Diagnostics.Tracing.Parsers.AsyncProfiler
         {
             get { return Action; }
             set { Action = (Action<AsyncEventsTraceData>)value; }
+        }
+
+        /// <summary>
+        /// Registers every native callstack IP contained in this buffer as a code address.
+        /// This is invoked during ETLX conversion so the IPs flow through TraceLog's normal
+        /// symbol-resolution pipeline (managed MethodLoad / module rundown).  Consumers can
+        /// later retrieve the resolved <c>CodeAddressIndex</c> for a given IP via
+        /// <c>TraceLog.GetCodeAddressIndexAtEvent</c> using this event as the context.
+        /// </summary>
+        internal override bool LogCodeAddresses(Func<TraceEvent, ulong, bool> callBack)
+        {
+            byte[] buffer = Buffer;
+            if (buffer != null && buffer.Length != 0)
+            {
+                AsyncProfilerTraceEventParser.ParseBuffer(this, buffer, new CodeAddressSink(this, callBack));
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Minimal <see cref="IAsyncProfilerSubEventSink"/> used by <see cref="LogCodeAddresses"/>
+        /// to feed the native IPs found in callstack sub-events to TraceLog's code-address map.
+        /// All non-callstack sub-events are ignored.
+        /// </summary>
+        private sealed class CodeAddressSink : IAsyncProfilerSubEventSink
+        {
+            private readonly AsyncEventsTraceData _event;
+            private readonly Func<TraceEvent, ulong, bool> _callBack;
+
+            public CodeAddressSink(AsyncEventsTraceData rawEvent, Func<TraceEvent, ulong, bool> callBack)
+            {
+                _event = rawEvent;
+                _callBack = callBack;
+            }
+
+            private void LogFrames(AsyncCallstackTraceData e)
+            {
+                AsyncFrame[] frames = e.Payload.Frames;
+                if (frames == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < frames.Length; i++)
+                {
+                    ulong ip = frames[i].NativeIP;
+                    // NativeIP == 0 marks a handrolled continuation that has no real code address.
+                    if (ip != 0)
+                    {
+                        _callBack(_event, ip);
+                    }
+                }
+            }
+
+            public void OnCreateAsyncCallstack(AsyncCallstackTraceData e) => LogFrames(e);
+            public void OnResumeAsyncCallstack(AsyncCallstackTraceData e) => LogFrames(e);
+            public void OnSuspendAsyncCallstack(AsyncCallstackTraceData e) => LogFrames(e);
+
+            public void OnCreateAsyncContext(CreateAsyncContextTraceData e) { }
+            public void OnResumeAsyncContext(ResumeAsyncContextTraceData e) { }
+            public void OnSuspendAsyncContext(SuspendAsyncContextTraceData e) { }
+            public void OnCompleteAsyncContext(CompleteAsyncContextTraceData e) { }
+            public void OnUnwindAsyncException(UnwindAsyncExceptionTraceData e) { }
+            public void OnResumeAsyncMethod(AsyncMethodTraceData e) { }
+            public void OnCompleteAsyncMethod(AsyncMethodTraceData e) { }
+            public void OnResetAsyncThreadContext(ResetAsyncTraceData e) { }
+            public void OnResetAsyncContinuationWrapperIndex(ResetAsyncTraceData e) { }
+            public void OnAsyncProfilerMetadata(AsyncProfilerMetadataTraceData e) { }
+            public void OnAsyncProfilerSyncClock(AsyncProfilerSyncClockTraceData e) { }
+            public void OnParseError(AsyncProfilerParseError e) { }
         }
 
         private static void XmlAttribHex(StringBuilder sb, string name, byte[] bytes)

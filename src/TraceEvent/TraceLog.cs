@@ -987,6 +987,19 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
         {
             // TODO optimize for sequential access.
             EventIndex eventIndex = context.EventIndex;
+            return GetCodeAddressIndexAtEvent(address, eventIndex);
+        }
+
+        /// <summary>
+        /// Like <see cref="GetCodeAddressIndexAtEvent(Address, TraceEvent)"/> but takes the
+        /// <see cref="EventIndex"/> directly.  This is useful when the address was logged
+        /// against an event that is no longer the 'current' event (e.g. a cached async-profiler
+        /// callstack whose frames were registered by an earlier event).  Returns
+        /// <see cref="CodeAddressIndex.Invalid"/> if no matching code address was logged.
+        /// </summary>
+        public CodeAddressIndex GetCodeAddressIndexAtEvent(Address address, EventIndex eventIndex)
+        {
+            // TODO optimize for sequential access.
             int index;
             if (!eventsToCodeAddresses.BinarySearch(eventIndex, out index, CodeAddressComparer))
             {

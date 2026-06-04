@@ -77,6 +77,30 @@ namespace TraceEventTests
         }
 
         [Fact]
+        public void TrailingPaddingPastTotalSize_IsIgnored()
+        {
+            // Build a valid buffer with two sub-events.  Finish() back-patches TotalSize to the
+            // exact (un-padded) length.
+            var b = new AsyncProfilerBufferBuilder(VERSION, asyncCtxId: 7, osThreadId: 42, startQpc: 1000);
+            b.AddResumeAsyncContext(deltaTicks: 10, taskId: 0x1234);
+            b.AddSuspendAsyncContext(deltaTicks: 5);
+            byte[] core = b.Finish();
+
+            // Append trailing zero padding past the logical end of the buffer.  A stray 0x00 byte
+            // decodes as eventId 0 (None) which hits the "Unknown sub-event id 0x00" path; the
+            // decoder must therefore stop at TotalSize rather than at buffer.Length.
+            byte[] padded = new byte[core.Length + 8];
+            Array.Copy(core, padded, core.Length);
+
+            var sink = new AsyncProfilerCollectingSink();
+            AsyncProfilerTraceEventParser.ParseBuffer(null, padded, sink);
+
+            Assert.Empty(sink.Errors);
+            Assert.Single(sink.ResumeAsyncContext);
+            Assert.Single(sink.SuspendAsyncContext);
+        }
+
+        [Fact]
         public void CreateAsyncContext_ParsesIdAndTimestamp()
         {
             var b = new AsyncProfilerBufferBuilder(VERSION, asyncCtxId: 7, osThreadId: 42, startQpc: 1000);

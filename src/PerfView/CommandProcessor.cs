@@ -1253,25 +1253,29 @@ namespace PerfView
                             if (parsedArgs.AsyncProfiler)
                             {
                                 // Tell the runtime async profiler to ship every in-flight per-thread
-                                // buffer before we stop the session.  This is done by re-issuing
-                                // EnableProvider with the FlushCommand controller command — the
-                                // runtime's EventSource.OnEventCommand handler treats command 1 as
-                                // "flush now".
+                                // buffer before we stop the session.  We are attached to an existing
+                                // session here, so we cannot use EnableProvider (it throws
+                                // NotSupportedException for sessions opened with
+                                // TraceEventSessionOptions.Attach).  CaptureState works on attached
+                                // sessions, and the runtime's EventSource treats the resulting
+                                // capture-state (SendManifest) request as a force-flush of all
+                                // per-thread async buffers.
                                 try
                                 {
-                                    var flushOptions = new TraceEventProviderOptions();
-                                    flushOptions.AddArgument("Command", AsyncProfilerTraceEventParser.FlushCommand.ToString());
-                                    clrSession.EnableProvider(
+                                    LogFile.WriteLine("Flushing async profiler buffers via CaptureState.");
+                                    clrSession.CaptureState(
                                         AsyncProfilerTraceEventParser.ProviderGuid,
-                                        TraceEventLevel.Verbose,
-                                        (ulong)AsyncProfilerTraceEventParser.Keywords.All,
-                                        flushOptions);
-                                    // Give the runtime a moment to drain the buffers before stop.
-                                    Thread.Sleep(200);
+                                        (ulong)AsyncProfilerTraceEventParser.Keywords.All);
+                                    // Give the runtime time to drain the per-thread buffers before we
+                                    // stop the session.  The runtime's forced flush spin-waits briefly
+                                    // on each busy worker thread and the capture-state request makes a
+                                    // cross-process round-trip, so a too-short wait would stop the
+                                    // session mid-flush and lose the async context events.
+                                    Thread.Sleep(1500);
                                 }
                                 catch (Exception ex)
                                 {
-                                    LogFile.WriteLine("Warning: failed to send AsyncProfiler flush command: {0}", ex.Message);
+                                    LogFile.WriteLine("Warning: failed to flush AsyncProfiler buffers: {0}", ex.Message);
                                 }
                             }
 

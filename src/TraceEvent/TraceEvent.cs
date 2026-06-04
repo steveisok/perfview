@@ -2885,9 +2885,13 @@ namespace Microsoft.Diagnostics.Tracing
             // ApplicationServerTraceEventParser is auto-generated and has many events sharing the same
             // task name, producing duplicate computed event names that ConfirmAllEventsAreInEnumeration
             // cannot handle.
+            // AsyncProfilerTraceEventParser decodes a single ETW event (the encoded "AsyncEvents" buffer)
+            // into many synthetic C# events that have no ETW template of their own, which likewise does
+            // not fit the 1:1 event-to-template model that ConfirmAllEventsAreInEnumeration assumes.
             if (GetProviderName() != null && !m_ConfirmedAllEventsAreInEnumeration &&
                 !(this is PredefinedDynamicTraceEventParser) &&
-                !(this is Parsers.ApplicationServerTraceEventParser))
+                !(this is Parsers.ApplicationServerTraceEventParser) &&
+                !(this is Parsers.AsyncProfilerTraceEventParser))
             {
                 ConfirmAllEventsAreInEnumeration();
                 m_ConfirmedAllEventsAreInEnumeration = true;

@@ -169,14 +169,14 @@ namespace Microsoft.Diagnostics.Tracing.Computers
             var s = GetOrCreate(e.ProcessID, e.AsyncThreadContextId, e.TaskId);
             _threadCurrentTask[new ThreadKey(e.ProcessID, e.OsThreadId)] = e.TaskId;
             AsyncContextResumed?.Invoke(new AsyncResumeInfo(e.RawEvent, e.ProcessID, e.AsyncThreadContextId,
-                e.OsThreadId, e.TaskId, e.ResolvedQpc, s.LastFullCallstack));
+                e.OsThreadId, e.TaskId, e.ResolvedQpc, s.LastFullCallstack, s.LastFullCallstackEventIndex));
         }
 
         public void OnSuspendAsyncContext(SuspendAsyncContextTraceData e)
         {
             var s = GetOrCreate(e.ProcessID, e.AsyncThreadContextId, e.TaskId);
             AsyncContextSuspended?.Invoke(new AsyncResumeInfo(e.RawEvent, e.ProcessID, e.AsyncThreadContextId,
-                e.OsThreadId, e.TaskId, e.ResolvedQpc, s.LastFullCallstack));
+                e.OsThreadId, e.TaskId, e.ResolvedQpc, s.LastFullCallstack, s.LastFullCallstackEventIndex));
         }
 
         public void OnCompleteAsyncContext(CompleteAsyncContextTraceData e)
@@ -184,7 +184,8 @@ namespace Microsoft.Diagnostics.Tracing.Computers
             var key = new ContextKey(e.ProcessID, e.AsyncThreadContextId);
             _contexts.TryGetValue(key, out var s);
             AsyncContextCompleted?.Invoke(new AsyncResumeInfo(e.RawEvent, e.ProcessID, e.AsyncThreadContextId,
-                e.OsThreadId, e.TaskId, e.ResolvedQpc, s?.LastFullCallstack));
+                e.OsThreadId, e.TaskId, e.ResolvedQpc, s?.LastFullCallstack,
+                s != null ? s.LastFullCallstackEventIndex : EventIndex.Invalid));
             _contexts.Remove(key);
         }
 
@@ -201,6 +202,7 @@ namespace Microsoft.Diagnostics.Tracing.Computers
             if (!e.Cached)
             {
                 s.LastFullCallstack = e.Payload;
+                s.LastFullCallstackEventIndex = e.RawEvent != null ? e.RawEvent.EventIndex : EventIndex.Invalid;
             }
         }
 
@@ -241,6 +243,11 @@ namespace Microsoft.Diagnostics.Tracing.Computers
         {
             public ulong TaskId;
             public CallstackPayload? LastFullCallstack;
+            // EventIndex of the AsyncEvents event that produced LastFullCallstack.  The frame
+            // IPs of that callstack were registered as code addresses against this event during
+            // ETLX conversion, so this is the context that must be passed to
+            // TraceLog.GetCodeAddressIndexAtEvent to retrieve their resolved indices.
+            public EventIndex LastFullCallstackEventIndex = EventIndex.Invalid;
         }
 
         private readonly struct ContextKey : IEquatable<ContextKey>
@@ -272,7 +279,8 @@ namespace Microsoft.Diagnostics.Tracing.Computers
     public sealed class AsyncResumeInfo
     {
         public AsyncResumeInfo(AsyncEventsTraceData rawEvent, int processId, uint asyncContextId,
-            ulong osThreadId, ulong taskId, long resolvedQpc, CallstackPayload? callstack)
+            ulong osThreadId, ulong taskId, long resolvedQpc, CallstackPayload? callstack,
+            EventIndex callstackEventIndex = EventIndex.Invalid)
         {
             RawEvent = rawEvent;
             ProcessID = processId;
@@ -281,6 +289,7 @@ namespace Microsoft.Diagnostics.Tracing.Computers
             TaskId = taskId;
             ResolvedQpc = resolvedQpc;
             Callstack = callstack;
+            CallstackEventIndex = callstackEventIndex;
         }
 
         public AsyncEventsTraceData RawEvent { get; }
@@ -290,5 +299,13 @@ namespace Microsoft.Diagnostics.Tracing.Computers
         public ulong TaskId { get; }
         public long ResolvedQpc { get; }
         public CallstackPayload? Callstack { get; }
+
+        /// <summary>
+        /// EventIndex of the AsyncEvents event whose buffer carried <see cref="Callstack"/>.
+        /// Used with <c>TraceLog.GetCodeAddressIndexAtEvent</c> to resolve the frame IPs to
+        /// symbolic code addresses.  <see cref="EventIndex.Invalid"/> when no callstack is
+        /// available (or the callstack originated from a fabricated event in unit tests).
+        /// </summary>
+        public EventIndex CallstackEventIndex { get; }
     }
 }
