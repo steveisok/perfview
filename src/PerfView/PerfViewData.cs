@@ -6870,6 +6870,17 @@ namespace PerfView
 
                 return asyncSource;
             }
+            else if (streamName == "CPU Stacks (with Async)")
+            {
+                var asyncCpuSource = new MutableTraceEventStackSource(eventLog);
+                asyncCpuSource.ShowUnknownAddresses = App.CommandLineArgs.ShowUnknownAddresses;
+                asyncCpuSource.ShowOptimizationTiers = App.CommandLineArgs.ShowOptimizationTiers;
+
+                var computer = new PerfView.Computers.AsyncProfilerCpuStitchComputer(eventLog, asyncCpuSource);
+                computer.GenerateStacks();
+
+                return asyncCpuSource;
+            }
             else
             {
                 throw new Exception("Unknown stream " + streamName);
@@ -8207,6 +8218,10 @@ namespace PerfView
             if (hasAsyncProfiler)
             {
                 advanced.Children.Add(new PerfViewStackSource(this, "Async Profiler Stacks"));
+                if (hasCPUStacks)
+                {
+                    advanced.Children.Add(new PerfViewStackSource(this, "CPU Stacks (with Async)"));
+                }
             }
             
             if (hasAnyStacks)
@@ -9820,6 +9835,7 @@ namespace PerfView
                 if (hasAsyncProfiler)
                 {
                     advanced.AddChild(new PerfViewStackSource(this, "Async Profiler Stacks"));
+                    advanced.AddChild(new PerfViewStackSource(this, "CPU Stacks (with Async)"));
                 }
 
                 if (hasExceptions)
@@ -10002,6 +10018,20 @@ namespace PerfView
                         computer.GenerateStacks();
 
                         return asyncSource;
+                    }
+                case "CPU Stacks (with Async)":
+                    {
+                        var eventLog = GetTraceLog(log);
+
+                        var asyncCpuSource = new MutableTraceEventStackSource(eventLog);
+                        asyncCpuSource.OnlyManagedCodeStacks = true;
+                        asyncCpuSource.ShowUnknownAddresses = App.CommandLineArgs.ShowUnknownAddresses;
+                        asyncCpuSource.ShowOptimizationTiers = App.CommandLineArgs.ShowOptimizationTiers;
+
+                        var computer = new PerfView.Computers.AsyncProfilerCpuStitchComputer(eventLog, asyncCpuSource);
+                        computer.GenerateStacks();
+
+                        return asyncCpuSource;
                     }
                 case "Thread Time (with StartStop Activities)":
                     {
