@@ -23,9 +23,11 @@ namespace TraceEventTests
         [Fact]
         public void ProviderGuid_MatchesEventSourceAlgorithm()
         {
-            // SHA-1-based GUID for "System.Runtime.CompilerServices.AsyncProfilerEventSource".
+            // SHA-1-based GUID for "System.Runtime.CompilerServices.AsyncProfilerEventSource"
+            // produced by the standard EventSource name-to-GUID algorithm (the same value the
+            // runtime advertises and PerfView enables on the wire).
             Assert.Equal(
-                new Guid("f8f29278-1df8-d650-aea7-594d846c2274"),
+                new Guid("7892f2f8-f81d-50d6-aea7-594d846c2274"),
                 AsyncProfilerTraceEventParser.ProviderGuid);
         }
 

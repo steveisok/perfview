@@ -1006,6 +1006,11 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                 return CodeAddressIndex.Invalid;
             }
 
+            // A single event can have more than one code address logged against it (e.g. an
+            // async-profiler 'AsyncEvents' buffer registers every native IP in its callstack
+            // frames).  BinarySearch returns the entry with the LARGEST index among those whose
+            // EventIndex matches, so walk BACKWARD through the entire run of matching-EventIndex
+            // entries to consider all of the addresses, not just the last one registered.
             do
             {
                 Debug.Assert(eventsToCodeAddresses[index].EventIndex == eventIndex);
@@ -1014,8 +1019,8 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                     return eventsToCodeAddresses[index].CodeAddressIndex;
                 }
 
-                index++;
-            } while (index < eventsToCodeAddresses.Count && eventsToCodeAddresses[index].EventIndex == eventIndex);
+                index--;
+            } while (index >= 0 && eventsToCodeAddresses[index].EventIndex == eventIndex);
             return CodeAddressIndex.Invalid;
         }
 
@@ -1411,6 +1416,15 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             rawEvents.Clr.GCJoin += doNothing;
             rawEvents.Clr.GCFinalizeObject += doNothing;
             rawEvents.Clr.MethodJittingStarted += doNothing;
+
+            // The async profiler 'AsyncEvents' event packs native callstack IPs inside its
+            // encoded buffer and exposes them via AsyncEventsTraceData.LogCodeAddresses().  That
+            // override only fires for events that have a callback (see comment above), so register
+            // a no-op here to make the IPs flow into the code-address map during conversion;
+            // otherwise async frames can never be symbolized (GetCodeAddressIndexAtEvent would
+            // always return Invalid).
+            var asyncProfilerParser = new Parsers.AsyncProfilerTraceEventParser(rawEvents);
+            asyncProfilerParser.AsyncEvents += doNothing;
 
             // This is required to ensure that self-describing metadata gets ingested before the event's extended data gets overwritten by the TraceLog.
             if (IsRealTime)
